@@ -1,0 +1,14 @@
+services:
+  auto-parts-ctf:
+    build: .
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    environment:
+      - TEAM_ID=solo
+      - LLM_PROVIDER=groq
+      - LLM_API_KEY=${LLM_API_KEY}
+      - DASHBOARD_INGEST_URL=

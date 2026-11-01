@@ -1,0 +1,5 @@
+# Here you add your API keys. Copy this file to api_keys.txt (it is git-ignored) and chmod 600 it.
+# One key per line: the provider name, then the key.
+#   for Groq type:    groq <your key>
+#   for Gemini type:  google <your key>
+# List the same key twice to let two teams share it. Lines starting with # are ignored.

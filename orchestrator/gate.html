@@ -1,0 +1,79 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NGDSA LLM Security CTF</title>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+:root{--red:#39ff14;--tx:#ececec;--mu:#7a7a7a}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#050505;color:var(--tx);font-family:'VT323',monospace;font-size:22px}
+#rain{position:fixed;inset:0;z-index:0}
+.veil{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at center,rgba(5,5,5,.88) 0,rgba(5,5,5,.6) 35%,transparent 80%)}
+main{position:relative;z-index:2;min-height:100%;display:grid;place-items:center;padding:24px}
+.term{width:100%;max-width:520px;background:rgba(5,5,5,.92);border:1px solid #333;box-shadow:0 30px 90px rgba(0,0,0,.8),0 0 50px rgba(57,255,20,.14)}
+.bar{display:flex;justify-content:space-between;padding:6px 14px;border-bottom:1px solid #333;color:var(--mu);font-size:19px}
+.bar i{color:var(--red);font-style:normal}
+.body{padding:22px 24px 26px}
+#intro{min-height:88px;white-space:pre-wrap;line-height:1.35;font-size:26px}
+label{display:block;margin:14px 0 4px;color:var(--mu)}
+label::before{content:'> ';color:var(--red)}
+input,select{width:100%;background:#000;color:var(--tx);border:1px solid #333;padding:9px 12px;font:inherit;border-radius:0}
+input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 1px var(--red)}
+button{width:100%;margin-top:20px;padding:10px;background:transparent;color:var(--tx);border:1px solid var(--tx);font:inherit;font-size:25px;letter-spacing:.06em;cursor:pointer;border-radius:0}
+button:hover:not(:disabled){background:var(--tx);color:#000}
+button:disabled{opacity:.5;cursor:wait}
+#err{min-height:1.3em;margin-top:12px;color:#ff2a2a}
+[hidden]{display:none!important}
+#keynote{margin-top:14px;color:var(--mu);min-height:1.3em}
+button.ghost{margin-top:12px;font-size:20px;border-color:#555;color:var(--mu)}
+</style></head><body><canvas id="rain"></canvas><div class="veil"></div>
+<main><div class="term"><div class="bar"><span>ngdsa@ctf:~$</span><i>&#9679; restricted</i></div><div class="body">
+<div id="intro"></div>
+<form id="s1" hidden><label for="ep">access code</label><input id="ep" type="password" autocomplete="off" required><button>authenticate</button></form>
+<form id="s2" method="post" action="/spawn" hidden>
+<input type="hidden" name="event_password" id="event_password">
+<label>team name</label><input name="team_name" pattern="[a-zA-Z0-9_\-]{1,32}" placeholder="letters, numbers, _ and -" required>
+<label>team password (to rejoin)</label><input name="team_password" type="password" minlength="6" required>
+<div id="keynote"></div>
+<button type="button" id="ownbtn" class="ghost" hidden>add your own api key</button>
+<div id="own" hidden><label>llm provider</label><select name="provider" disabled>%%PROVIDERS%%</select>
+<label>provider api key</label><input name="api_key" type="password" autocomplete="off" disabled></div>
+<button id="go">launch instance</button></form>
+<div id="err" role="alert"></div></div></div></main>
+<script>
+const TRAIL='60,180,40',HEAD='#39ff14';   // swap for green: '0,255,65' / '#39ff14'
+const c=document.getElementById('rain'),x=c.getContext('2d');
+const L=[{s:14,v:.45,a:.35,h:0},{s:24,v:.9,a:1,h:1}];
+function rs(){c.width=innerWidth;c.height=innerHeight;L.forEach(l=>l.d=Array.from({length:Math.ceil(c.width/l.s)},()=>-Math.random()*c.height/l.s))}
+rs();addEventListener('resize',rs);
+const bit=()=>Math.random()<.5?'0':'1';
+setInterval(()=>{x.fillStyle='rgba(5,5,5,.13)';x.fillRect(0,0,c.width,c.height);
+L.forEach(l=>{x.font=l.s+'px "VT323",monospace';l.d.forEach((y,i)=>{const px=i*l.s,py=y*l.s;
+x.fillStyle='rgba('+TRAIL+','+(.55*l.a)+')';x.fillText(bit(),px,py-l.s);
+if(l.h){x.shadowColor=HEAD;x.shadowBlur=16;x.fillStyle=HEAD;x.fillText(bit(),px,py);x.shadowBlur=0}
+if(py>c.height&&Math.random()>.975)l.d[i]=0;l.d[i]+=l.v})})},40);
+const lines=['> hello, friend.','> this is a restricted environment.','> authenticate to continue.'];
+const intro=document.getElementById('intro');let li=0,ci=0;
+(function type(){if(li>=lines.length){document.getElementById('s1').hidden=false;document.getElementById('ep').focus();return}
+intro.textContent=lines.slice(0,li).join('\n')+(li?'\n':'')+lines[li].slice(0,++ci)+'_';
+if(ci>=lines[li].length){li++;ci=0;setTimeout(type,350)}else setTimeout(type,22)})();
+const err=document.getElementById('err');
+document.getElementById('s1').onsubmit=async e=>{e.preventDefault();err.textContent='';const pw=document.getElementById('ep').value;
+const r=await fetch('/api/check-pass',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'event_password='+encodeURIComponent(pw)});
+if(r.ok){const d=await r.json().catch(()=>({}));initKeys(!!d.pool_available);document.getElementById('event_password').value=pw;e.target.hidden=true;document.getElementById('s2').hidden=false;intro.textContent='> access granted.\n> provision your instance.'}
+else err.textContent=r.status==429?'> too many attempts. wait a minute.':'> access denied.'};
+/* api key pool  */
+const ownDiv=document.getElementById('own'),ownBtn=document.getElementById('ownbtn'),keynote=document.getElementById('keynote');
+let forced=false;
+function setOwn(on){ownDiv.hidden=!on;ownDiv.querySelectorAll('input,select').forEach(i=>{i.disabled=!on});ownDiv.querySelector('input').required=on;ownBtn.textContent=on?'use a provided api key instead':'add your own api key';if(!forced)keynote.textContent=on?'> using your own api key.':'> an api key will be assigned to your team automatically.'}
+function forceOwn(msg){forced=true;ownBtn.hidden=true;setOwn(true);keynote.textContent=msg}
+/* pool empty -> key box visible but optional, so pool teams can still rejoin with name + password  */
+function initKeys(ok){forced=false;if(ok){ownBtn.hidden=false;setOwn(false)}else{forced=true;ownBtn.hidden=true;setOwn(true);ownDiv.querySelector('input').required=false;keynote.textContent='> no api keys left. returning team: enter your team name + password only. new team: add your own api key below.'}}
+ownBtn.onclick=()=>setOwn(ownDiv.hidden);
+document.getElementById('s2').onsubmit=async e=>{e.preventDefault();err.textContent='';const b=document.getElementById('go');b.disabled=true;b.textContent='launching... up to 30s';
+ try{const r=await fetch('/spawn',{method:'POST',headers:{'Accept':'application/json'},body:new FormData(e.target)});
+  const d=await r.json().catch(()=>({}));
+  if(r.ok&&d.redirect){location.href=d.redirect;return}
+  const m=d.detail,s=typeof m==='string'?m:'request refused';err.textContent='> '+s.toLowerCase();
+  if(r.status==409&&/no api keys/i.test(s))forceOwn('> no api keys available, add your api key here.');
+  else if(/own api key|wrong api key/i.test(s))forceOwn('> this team uses its own api key - enter it again.')}
+ catch(x){err.textContent='> network error - try again.'}
+ b.disabled=false;b.textContent='launch instance'};
+</script></body></html>

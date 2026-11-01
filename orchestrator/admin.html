@@ -1,0 +1,75 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NGDSA // ADMIN</title>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<style>
+body{margin:0;padding:24px;background:#050805;color:#39ff14;font-family:'VT323',monospace;font-size:21px}
+h1{font-weight:400;font-size:38px;margin:0 0 4px;color:#ffb000;text-shadow:0 0 8px #ffb000}
+.bar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}
+input,button{background:#000;color:#39ff14;border:1px solid #1f5c2a;padding:8px 12px;font:inherit}
+button{cursor:pointer}button:hover{background:#39ff14;color:#000}
+button.danger{border-color:#ff2a2a;color:#ff2a2a}button.danger:hover{background:#ff2a2a;color:#000}
+table{width:100%;border-collapse:collapse}
+th{color:#ffb000;text-align:left;font-weight:400}
+th,td{padding:6px 10px;border-bottom:1px solid #1f5c2a;word-break:break-all}
+a{color:#39ff14}#msg{color:#8fd89a;min-height:1.2em}
+</style></head><body>
+<h1>NGDSA // ORGANIZER CONSOLE</h1><div id="msg">Enter the spawner admin key.</div>
+<div class="bar"><input id="key" type="password" placeholder="SPAWNER_ADMIN_KEY" size="34">
+<button onclick="load()">Connect</button><button class="danger" onclick="wipe()">Reset ALL teams</button><button onclick="backup()">Create backup</button><button onclick="restoreDb()">Restore backup</button><button class="danger" onclick="wipeDb()">Wipe database</button></div>
+<div id="count"></div><div id="pool"></div><div id="backups"></div>
+<table><thead><tr><th>Team</th><th>Provider</th><th>Key</th><th>Spawned (UTC)</th><th>Link</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+<script>
+let timer;const $=id=>document.getElementById(id);
+const H=()=>({'X-Admin-Key':$('key').value});
+const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+async function load(){const r=await fetch('/api/status',{headers:H()});
+if(!r.ok){$('msg').textContent='ERROR '+r.status+(r.status==403?' - bad key':r.status==429?' - rate limited':'');return}
+const d=await r.json();$('msg').textContent='Connected. Auto-refresh every 10s.';$('count').textContent='Active teams: '+d.length;
+$('rows').innerHTML=d.map(t=>`<tr><td>${esc(t.team_name)}</td><td>${esc(t.provider)}</td><td>${esc(t.key||'own')}</td><td>${esc(t.spawned_at.slice(0,19))}</td><td><a href="${esc(t.url)}" target="_blank" rel="noopener">open</a></td><td><button class="danger" data-team="${esc(t.team_name)}" onclick="kill(this.dataset.team)">Delete</button></td></tr>`).join('');
+loadExtra();clearInterval(timer);timer=setInterval(load,10000)}
+async function kill(n){if(!confirm('Delete team '+n+'?'))return;const r=await fetch('/api/teardown/'+encodeURIComponent(n),{method:'POST',headers:H()});$('msg').textContent=r.ok?'Deleted '+n:'Failed '+r.status;load()}
+async function wipe(){if(prompt('Type WIPE to delete every team')!=='WIPE')return;const r=await fetch('/api/reset-all',{method:'POST',headers:H()});$('msg').textContent=r.ok?'All teams removed':'Failed '+r.status;load()}
+
+async function loadExtra(){
+try{const p=await fetch('/api/pool',{headers:H()});if(p.ok){const d=await p.json();
+$('pool').textContent='API key pool: '+d.free+' free / '+d.total+' total ('+d.in_use+' in use)'+(d.file_found?'':' - key file not found')}}catch(e){}
+try{const b=await fetch('/api/backups',{headers:H()});if(b.ok){const d=await b.json();
+$('backups').textContent=d.length?'Backups: '+d.slice(0,8).map(x=>x.name+' ('+Math.max(1,Math.round(x.bytes/1024))+' KB, '+x.created.slice(0,16).replace('T',' ')+')').join(' | '):'Backups: none yet'}
+else{$('backups').textContent='Backups: unavailable ('+b.status+')'}}catch(e){}}
+async function backup(){
+const d=new Date(),p=n=>String(n).padStart(2,'0');
+let name=prompt('Backup name (letters, numbers, . _ - ):','backup-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+p(d.getHours())+p(d.getMinutes()));
+while(name!==null){name=name.trim();if(!name){name=prompt('The name cannot be empty:','');continue}
+const r=await fetch('/api/backup',{method:'POST',headers:Object.assign({'Content-Type':'application/x-www-form-urlencoded'},H()),body:'name='+encodeURIComponent(name)});
+const j=await r.json().catch(()=>({}));
+if(r.ok){$('msg').textContent='Backup created: '+name;loadExtra();return}
+if(r.status==409||r.status==400){name=prompt((j.detail||'Name refused')+'\n\nChoose a different name:',name);continue}
+$('msg').textContent='Backup failed: '+(j.detail||r.status);return}
+$('msg').textContent='Backup cancelled'}
+async function wipeDb(){
+if(prompt('This DELETES ALL teams and leaderboard data and removes every running team instance.\nAn automatic backup is made first.\nType WIPE to continue')!=='WIPE')return;
+$('msg').textContent='Wiping...';
+const r=await fetch('/api/wipe-db',{method:'POST',headers:H()});const j=await r.json().catch(()=>({}));
+$('msg').textContent=r.ok?'Database wiped. Backup kept as '+j.backup+' ('+j.teams_removed+' team instances removed)':'Wipe failed: '+(j.detail||r.status);load()}
+
+async function restoreDb(){
+const r=await fetch('/api/backups',{headers:H()});
+if(!r.ok){$('msg').textContent='Cannot list backups ('+r.status+')';return}
+const list=await r.json();
+if(!list.length){$('msg').textContent='There are no backups to restore.';return}
+const fmt=x=>x.name+'  ('+Math.max(1,Math.round(x.bytes/1024))+' KB, '+x.created.slice(0,16).replace('T',' ')+' UTC)';
+let pick;
+if(list.length===1){pick=list[0]}
+else{
+const a=prompt('Which backup do you want to restore?\n\n'+list.map((x,i)=>(i+1)+') '+fmt(x)).join('\n')+'\n\nType its number or its name:');
+if(a===null){$('msg').textContent='Restore cancelled';return}
+const s=a.trim();
+pick=list.find(x=>x.name===s)||(/^\d+$/.test(s)?list[parseInt(s,10)-1]:null);
+if(!pick){$('msg').textContent='No backup matches "'+s+'" - nothing restored.';return}}
+if(prompt('Restore '+fmt(pick)+'?\n\nThe leaderboard and team list are REPLACED by this backup.\nThe current data is saved first as pre-restore-...\nRunning team instances are not touched.\n\nType RESTORE to continue')!=='RESTORE'){$('msg').textContent='Restore cancelled';return}
+$('msg').textContent='Restoring...';
+const p=await fetch('/api/restore',{method:'POST',headers:Object.assign({'Content-Type':'application/x-www-form-urlencoded'},H()),body:'name='+encodeURIComponent(pick.name)});
+const j=await p.json().catch(()=>({}));
+$('msg').textContent=p.ok?'Restored '+pick.name+' ('+j.teams+' teams, '+j.captures+' captures). Previous data saved as '+j.safety_backup:'Restore failed: '+(j.detail||p.status);
+load()}
+$('key').addEventListener('keydown',e=>{if(e.key==='Enter')load()});
+</script></body></html>

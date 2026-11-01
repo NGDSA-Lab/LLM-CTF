@@ -1,0 +1,36 @@
+# Credentials & local secrets
+.env
+local.env
+api_keys.txt
+presets.json
+*.pem
+*.key
+id_*
+
+# Databases & dynamic runtimes
+*.db
+*.sqlite3
+state.json
+ctf_dashboard.db
+eng_parts.db
+legacy/
+backups/
+
+# Base flag backup created at container start
+flag_config_base.py
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# Backup & editor artifacts
+*.bak
+*.bak*
+*.pre-*
+*.swp
+*~
+.DS_Store
+Thumbs.db

@@ -1,0 +1,10 @@
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+pydantic==2.6.1
+
+# chains.py uses the pre-0.1 "from langchain.chat_models import ChatOpenAI"
+# import path, which wraps the openai<1.0 SDK. Do not bump these
+# independently of each other, or that import will break.
+langchain==0.0.354
+openai==0.28.1
+httpx==0.27.0
